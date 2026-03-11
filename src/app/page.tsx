@@ -1,5 +1,6 @@
 'use client'
-
+console.log(process.env.NEXT_PUBLIC_SUPABASE_URL)
+console.log(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
