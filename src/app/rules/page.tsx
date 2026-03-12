@@ -3,10 +3,11 @@ import Link from 'next/link'
 export default function RulesPage() {
   return (
     <main className="container">
-      <div className="nav">
-        <h1>Game Rules</h1>
+      <div className="nav" style={{ marginBottom: '1rem', gap: '1rem' }}>
+        <h2 style={{ margin: 0 }}>Rules</h2>
         <div className="nav-links">
           <Link href="/" className="small">Home</Link>
+          <Link href="/picks" className="small">Picks</Link>
         </div>
       </div>
 

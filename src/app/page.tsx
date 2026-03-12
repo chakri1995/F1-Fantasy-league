@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
 import type { Weekend } from '@/lib/types'
 
@@ -21,11 +22,13 @@ interface BreakdownRow {
 }
 
 export default function HomePage() {
+  const router = useRouter()
   const [email, setEmail] = useState<string>('')
   const [weekends, setWeekends] = useState<Weekend[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([])
   const [breakdowns, setBreakdowns] = useState<Record<string, BreakdownRow[]>>({})
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(true)
   const configured = isSupabaseConfigured()
 
   useEffect(() => {
@@ -34,6 +37,12 @@ export default function HomePage() {
       const {
         data: { user },
       } = await supabase.auth.getUser()
+      
+      if (!user) {
+        router.push('/auth')
+        return
+      }
+      
       setEmail(user?.email ?? '')
 
       const [{ data: wData }, { data: lbData }] = await Promise.all([
@@ -47,10 +56,11 @@ export default function HomePage() {
 
       setWeekends((wData ?? []) as Weekend[])
       setLeaderboard((lbData ?? []) as LeaderboardRow[])
+      setLoading(false)
     }
 
     load()
-  }, [])
+  }, [router])
 
   const toggleUser = async (userId: string) => {
     if (!supabase) return
@@ -73,16 +83,29 @@ export default function HomePage() {
     setExpandedUsers(newSet)
   }
 
+  async function logout() {
+    if (!supabase) return
+    await supabase.auth.signOut()
+    router.push('/auth')
+  }
+
+  if (loading) {
+    return <main className="container"><p>Loading...</p></main>
+  }
+
   return (
     <main className="container">
-      <nav className="nav" style={{ marginBottom: '1rem' }}>
-        <Link href="/rules" className="small" style={{ marginRight: '1rem' }}>
-          Rules
-        </Link>
-        <Link href="/dashboard" className="small">
-          Dashboard
-        </Link>
-      </nav>
+      <div className="nav" style={{ marginBottom: '1rem', gap: '1rem' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Home</h2>
+          <p className="small" style={{ margin: '0.25rem 0 0 0' }}>{email}</p>
+        </div>
+        <div className="nav-links">
+          <Link href="/picks" className="small">Picks</Link>
+          <Link href="/rules" className="small">Rules</Link>
+          <button className="secondary" style={{ width: 'auto' }} onClick={logout}>Logout</button>
+        </div>
+      </div>
 
       <div style={{ overflowX: 'auto', display: 'flex', gap: '1rem', padding: '1rem 0' }}>
         {weekends.map((w) => {

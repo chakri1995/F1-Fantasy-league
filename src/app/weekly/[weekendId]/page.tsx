@@ -24,6 +24,7 @@ export default function WeeklyBreakdownPage() {
   const router = useRouter()
   const [rows, setRows] = useState<EventRow[]>([])
   const [status, setStatus] = useState('Loading...')
+  const [email, setEmail] = useState<string>('')
 
   useEffect(() => {
     async function load() {
@@ -40,6 +41,8 @@ export default function WeeklyBreakdownPage() {
         router.push('/auth')
         return
       }
+
+      setEmail(user?.email ?? '')
 
       const { data, error } = await supabase
         .from('weekly_breakdown')
@@ -77,12 +80,23 @@ export default function WeeklyBreakdownPage() {
     return base
   }, [rows])
 
+  async function logout() {
+    if (!supabase) return
+    await supabase.auth.signOut()
+    router.push('/auth')
+  }
+
   return (
     <main className="container">
-      <div className="nav">
-        <h1>Weekly Breakdown</h1>
+      <div className="nav" style={{ marginBottom: '1rem', gap: '1rem' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Results</h2>
+          <p className="small" style={{ margin: '0.25rem 0 0 0' }}>{email}</p>
+        </div>
         <div className="nav-links">
-          <Link href="/dashboard" className="small">Dashboard</Link>
+          <Link href="/" className="small">Home</Link>
+          <Link href="/picks" className="small">Picks</Link>
+          <button className="secondary" style={{ width: 'auto' }} onClick={logout}>Logout</button>
         </div>
       </div>
 

@@ -30,8 +30,7 @@ export default function PicksPage() {
   const [sprintPicks, setSprintPicks] = useState<string[]>(buildDefault(5))
   const [racePicks, setRacePicks] = useState<string[]>(buildDefault(10))
   const [status, setStatus] = useState('Loading...')
-  const [mode, setMode] = useState<'dropdown' | 'click' | 'drag'>('dropdown')
-  const [searchTerms, setSearchTerms] = useState<Record<string, string>>({})
+  const [email, setEmail] = useState<string>('')
 
   useEffect(() => {
     async function load() {
@@ -48,6 +47,8 @@ export default function PicksPage() {
         router.push('/auth')
         return
       }
+
+      setEmail(user?.email ?? '')
 
       const [{ data: driversData }, { data: weekendData, error: weekendError }, { data: picksData, error: picksError }] =
         await Promise.all([
@@ -217,240 +218,136 @@ export default function PicksPage() {
   function renderSession(session: SessionType) {
     const config = SESSION_RULES[session]
     const picks = getSessionPicks(session)
+    const pool = getAvailableDrivers(session)
 
-    // dropdown mode uses the existing UI
-    if (mode === 'dropdown') {
-      return (
-        <div className="card" key={session}>
-          <h2>{config.label}</h2>
-          <p className="small" style={{ marginTop: '0.35rem' }}>
-            Lock: {new Date(
-              session === 'qualifying'
-                ? weekend?.qualifying_deadline ?? ''
-                : session === 'sprint_qualifying'
-                ? weekend?.sprint_qualifying_deadline ?? weekend?.sprint_deadline ?? ''
-                : session === 'sprint'
-                ? weekend?.sprint_deadline ?? ''
-                : weekend?.race_deadline ?? '',
-            ).toLocaleString()}
-          </p>
+    const onDragStart = (event: React.DragEvent, driverId: string, origin?: 'pool' | 'slot', idx?: number) => {
+      event.dataTransfer.setData('text/plain', JSON.stringify({ driverId, origin, idx }))
+    }
+    const onDropSlot = (event: React.DragEvent, slotIdx: number) => {
+      event.preventDefault()
+      const data = event.dataTransfer.getData('text/plain')
+      if (!data) return
+      const { driverId, origin, idx } = JSON.parse(data)
+      if (origin === 'slot' && idx === slotIdx) return
+      if (origin === 'slot' && typeof idx === 'number') {
+        const sourcePicks = getSessionPicks(session)
+        updatePick(session, slotIdx + 1, sourcePicks[idx])
+        updatePick(session, idx + 1, '')
+        return
+      }
+      updatePick(session, slotIdx + 1, driverId)
+    }
+    const allowDrop = (event: React.DragEvent) => event.preventDefault()
 
-          <div style={{ marginTop: '0.75rem' }}>
-            {Array.from({ length: config.size }, (_, i) => {
-              const key = `${session}-${i}`
-              const term = searchTerms[key] || ''
-              const options = drivers.filter((d) =>
-                d.full_name.toLowerCase().includes(term.toLowerCase()),
-              )
-              return (
-                <div className="grid two" key={`${session}-${i + 1}`} style={{ marginBottom: '0.55rem' }}>
-                  <div className="small" style={{ alignSelf: 'center' }}>Position {i + 1}</div>
-                  <div>
-                    <input
-                      className="small"
-                      placeholder="search"
-                      value={term}
-                      onChange={(e) =>
-                        setSearchTerms((prev) => ({ ...prev, [key]: e.target.value }))
-                      }
-                      disabled={locks[session]}
-                      style={{ marginBottom: '0.25rem', width: '100%' }}
-                    />
-                    <select
-                      value={picks[i]}
-                      onChange={(event) => updatePick(session, i + 1, event.target.value)}
-                      disabled={locks[session]}
-                    >
-                      <option value="">Select driver</option>
-                      {options.map((driver) => (
-                        <option value={driver.id} key={`${session}-${driver.id}`}>
-                          #{driver.number} {driver.full_name} ({driver.team_name})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          <button disabled={locks[session]} onClick={() => saveSession(session)}>
-            {locks[session] ? 'Locked' : `Save ${session}`}
-          </button>
-        </div>
-      )
+    const getDriverName = (driverId: string) => {
+      const d = drivers.find((x) => x.id === driverId)
+      return d?.full_name || driverId
     }
 
-    // click mode: pool + slots
-    if (mode === 'click') {
-      const pool = getAvailableDrivers(session)
-      const handleDriverClick = (driverId: string) => {
-        const idx = picks.findIndex((p) => !p)
-        if (idx !== -1) updatePick(session, idx + 1, driverId)
-      }
+    return (
+      <div className="card" key={session}>
+        <h2>{config.label}</h2>
+        <p className="small" style={{ marginTop: '0.35rem' }}>
+          Lock:{' '}
+          {new Date(
+            session === 'qualifying'
+              ? weekend?.qualifying_deadline ?? ''
+              : session === 'sprint_qualifying'
+              ? weekend?.sprint_qualifying_deadline ?? weekend?.sprint_deadline ?? ''
+              : session === 'sprint'
+              ? weekend?.sprint_deadline ?? ''
+              : weekend?.race_deadline ?? '',
+          ).toLocaleString()}
+        </p>
 
-      const handleSlotClick = (index: number) => {
-        const current = picks[index]
-        if (current) updatePick(session, index + 1, '')
-      }
-
-      return (
-        <div className="card" key={session}>
-          <h2>{config.label} (click)</h2>
-          <p className="small" style={{ marginTop: '0.35rem' }}>
-            Lock: {new Date(
-              session === 'qualifying'
-                ? weekend?.qualifying_deadline ?? ''
-                : session === 'sprint_qualifying'
-                ? weekend?.sprint_qualifying_deadline ?? weekend?.sprint_deadline ?? ''
-                : session === 'sprint'
-                ? weekend?.sprint_deadline ?? ''
-                : weekend?.race_deadline ?? '',
-            ).toLocaleString()}
-          </p>
-
-          <div className="grid two" style={{ gap: '1rem' }}>
-            <div>
-              <h3 className="small">Pool</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginTop: '1rem' }}>
+          <div>
+            <h3 className="small" style={{ marginBottom: '0.5rem' }}>Available</h3>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
               {pool.map((d) => (
                 <div
                   key={d.id}
-                  className="card small"
-                  style={{ cursor: 'pointer', marginBottom: '0.4rem' }}
-                  onClick={() => handleDriverClick(d.id)}
-                >
-                  #{d.number} {d.full_name}
-                </div>
-              ))}
-            </div>
-
-            <div>
-              <h3 className="small">Slots</h3>
-              {Array.from({ length: config.size }, (_, i) => (
-                <div
-                  key={i}
-                  className="card small"
-                  style={{ cursor: 'pointer', marginBottom: '0.4rem' }}
-                  onClick={() => handleSlotClick(i)}
-                >
-                  {picks[i] || <span className="small">empty</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <button disabled={locks[session]} onClick={() => saveSession(session)}>
-            {locks[session] ? 'Locked' : `Save ${session}`}
-          </button>
-        </div>
-      )
-    }
-
-    // drag mode
-    if (mode === 'drag') {
-      const pool = getAvailableDrivers(session)
-
-      const onDragStart = (event: React.DragEvent, driverId: string, origin?: 'pool' | 'slot', idx?: number) => {
-        event.dataTransfer.setData('text/plain', JSON.stringify({ driverId, origin, idx }))
-      }
-      const onDropSlot = (event: React.DragEvent, slotIdx: number) => {
-        event.preventDefault()
-        const data = event.dataTransfer.getData('text/plain')
-        if (!data) return
-        const { driverId, origin, idx } = JSON.parse(data)
-        if (origin === 'slot' && idx === slotIdx) return
-        if (origin === 'slot' && typeof idx === 'number') {
-          // swap slots
-          const sourcePicks = getSessionPicks(session)
-          updatePick(session, slotIdx + 1, sourcePicks[idx])
-          updatePick(session, idx + 1, '')
-          return
-        }
-        // otherwise from pool or another slot
-        updatePick(session, slotIdx + 1, driverId)
-      }
-      const allowDrop = (event: React.DragEvent) => event.preventDefault()
-
-      return (
-        <div className="card" key={session}>
-          <h2>{config.label} (drag)</h2>
-          <p className="small" style={{ marginTop: '0.35rem' }}>
-            Lock: {new Date(
-              session === 'qualifying'
-                ? weekend?.qualifying_deadline ?? ''
-                : session === 'sprint_qualifying'
-                ? weekend?.sprint_qualifying_deadline ?? weekend?.sprint_deadline ?? ''
-                : session === 'sprint'
-                ? weekend?.sprint_deadline ?? ''
-                : weekend?.race_deadline ?? '',
-            ).toLocaleString()}
-          </p>
-
-          <div className="grid two" style={{ gap: '1rem' }}>
-            <div>
-              <h3 className="small">Pool</h3>
-              {pool.map((d) => (
-                <div
-                  key={d.id}
-                  className="card small"
                   draggable={!locks[session]}
                   onDragStart={(e) => onDragStart(e, d.id, 'pool')}
-                  style={{ marginBottom: '0.4rem' }}
+                  style={{
+                    padding: '0.4rem 0.5rem',
+                    background: '#f0f0f0',
+                    borderRadius: '4px',
+                    cursor: !locks[session] ? 'grab' : 'default',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    minWidth: '40px',
+                    textAlign: 'center',
+                  }}
+                  title={d.full_name}
                 >
-                  #{d.number} {d.full_name}
+                  #{d.number}
                 </div>
               ))}
             </div>
+          </div>
 
-            <div>
-              <h3 className="small">Slots</h3>
+          <div>
+            <h3 className="small" style={{ marginBottom: '0.5rem' }}>Positions</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '0.5rem' }}>
               {Array.from({ length: config.size }, (_, i) => (
                 <div
                   key={i}
-                  className="card small"
                   onDragOver={allowDrop}
                   onDrop={(e) => onDropSlot(e, i)}
                   draggable={!!picks[i] && !locks[session]}
                   onDragStart={(e) => picks[i] && onDragStart(e, picks[i], 'slot', i)}
-                  style={{ marginBottom: '0.4rem' }}
+                  style={{
+                    padding: '0.6rem',
+                    border: '2px dashed #ccc',
+                    borderRadius: '4px',
+                    minHeight: '80px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    textAlign: 'center',
+                    cursor: picks[i] ? 'grab' : 'drop',
+                    background: picks[i] ? '#e8f5e9' : '#fafafa',
+                  }}
                 >
-                  {picks[i] || <span className="small">empty</span>}
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, margin: '0 0 0.25rem 0' }}>P{i + 1}</p>
+                  {picks[i] ? (
+                    <p style={{ fontSize: '0.75rem', margin: 0 }}>{getDriverName(picks[i])}</p>
+                  ) : (
+                    <p style={{ fontSize: '0.7rem', color: '#999', margin: 0 }}>drag here</p>
+                  )}
                 </div>
               ))}
             </div>
           </div>
-
-          <button disabled={locks[session]} onClick={() => saveSession(session)}>
-            {locks[session] ? 'Locked' : `Save ${session}`}
-          </button>
         </div>
-      )
-    }
 
-    return null
+        <button disabled={locks[session]} onClick={() => saveSession(session)} style={{ marginTop: '1rem' }}>
+          {locks[session] ? 'Locked' : `Save ${session}`}
+        </button>
+      </div>
+    )
+  }
+
+  async function logout() {
+    if (!supabase) return
+    await supabase.auth.signOut()
+    router.push('/auth')
   }
 
   return (
     <main className="container">
-      <div className="nav">
+      <div className="nav" style={{ marginBottom: '1rem', gap: '1rem' }}>
         <div>
-          <h1>Race Picks</h1>
-          <p className="small" style={{ marginTop: '0.35rem' }}>
-            {weekend ? `${weekend.season} Round ${weekend.round} - ${weekend.grand_prix}` : 'Loading weekend...'}
-          </p>
+          <h2 style={{ margin: 0 }}>Make Picks</h2>
+          <p className="small" style={{ margin: '0.25rem 0 0 0' }}>{email}</p>
         </div>
         <div className="nav-links">
-          <Link href="/dashboard" className="small">Dashboard</Link>
+          <Link href="/" className="small">Home</Link>
+          <Link href="/rules" className="small">Rules</Link>
+          <button className="secondary" style={{ width: 'auto' }} onClick={logout}>Logout</button>
         </div>
-      </div>
-
-      <div style={{ margin: '1rem 0' }}>
-        <label className="small" style={{ marginRight: '0.5rem' }}>Interaction mode:</label>
-        <select value={mode} onChange={(e) => setMode(e.target.value as any)}>
-          <option value="dropdown">Dropdown (default)</option>
-          <option value="click">Click & place</option>
-          <option value="drag">Drag & drop</option>
-        </select>
       </div>
 
       {status && (
