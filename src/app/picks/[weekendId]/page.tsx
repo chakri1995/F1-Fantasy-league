@@ -9,6 +9,7 @@ import type { SessionType } from '@/lib/scoring'
 
 const SESSION_RULES: Record<SessionType, { size: number; label: string }> = {
   qualifying: { size: 3, label: 'Qualifying Top 3' },
+  sprint_qualifying: { size: 3, label: 'Sprint Qualifying Top 3' },
   sprint: { size: 5, label: 'Sprint Top 5' },
   race: { size: 10, label: 'Race Top 10' },
 }
@@ -25,6 +26,7 @@ export default function PicksPage() {
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [weekend, setWeekend] = useState<Weekend | null>(null)
   const [qualifyingPicks, setQualifyingPicks] = useState<string[]>(buildDefault(3))
+  const [sprintQualifyingPicks, setSprintQualifyingPicks] = useState<string[]>(buildDefault(3))
   const [sprintPicks, setSprintPicks] = useState<string[]>(buildDefault(5))
   const [racePicks, setRacePicks] = useState<string[]>(buildDefault(10))
   const [status, setStatus] = useState('Loading...')
@@ -71,12 +73,16 @@ export default function PicksPage() {
       setWeekend(weekendData as Weekend)
 
       const q = buildDefault(3)
+      const sq = buildDefault(3)
       const s = buildDefault(5)
       const r = buildDefault(10)
 
       for (const pick of picksData ?? []) {
-        const target =
-          pick.session_type === 'qualifying' ? q : pick.session_type === 'sprint' ? s : pick.session_type === 'race' ? r : null
+        let target: string[] | null = null
+        if (pick.session_type === 'qualifying') target = q
+        else if (pick.session_type === 'sprint_qualifying') target = sq
+        else if (pick.session_type === 'sprint') target = s
+        else if (pick.session_type === 'race') target = r
 
         if (!target) continue
         const idx = pick.predicted_position - 1
@@ -86,6 +92,7 @@ export default function PicksPage() {
       }
 
       setQualifyingPicks(q)
+      setSprintQualifyingPicks(sq)
       setSprintPicks(s)
       setRacePicks(r)
       setStatus('')
@@ -96,12 +103,13 @@ export default function PicksPage() {
 
   const locks = useMemo(() => {
     if (!weekend) {
-      return { qualifying: true, sprint: true, race: true }
+      return { qualifying: true, sprint_qualifying: true, sprint: true, race: true }
     }
 
     const now = Date.now()
     return {
       qualifying: now >= new Date(weekend.qualifying_deadline).getTime(),
+      sprint_qualifying: now >= new Date(weekend.sprint_qualifying_deadline ?? weekend.sprint_deadline).getTime(),
       sprint: now >= new Date(weekend.sprint_deadline).getTime(),
       race: now >= new Date(weekend.race_deadline).getTime(),
     }
@@ -113,6 +121,13 @@ export default function PicksPage() {
       const next = [...qualifyingPicks]
       next[index] = driverId
       setQualifyingPicks(next)
+      return
+    }
+
+    if (session === 'sprint_qualifying') {
+      const next = [...sprintQualifyingPicks]
+      next[index] = driverId
+      setSprintQualifyingPicks(next)
       return
     }
 
@@ -130,6 +145,7 @@ export default function PicksPage() {
 
   function getSessionPicks(session: SessionType): string[] {
     if (session === 'qualifying') return qualifyingPicks
+    if (session === 'sprint_qualifying') return sprintQualifyingPicks
     if (session === 'sprint') return sprintPicks
     return racePicks
   }
@@ -165,6 +181,8 @@ export default function PicksPage() {
     const lock =
       session === 'qualifying'
         ? new Date(weekend.qualifying_deadline).getTime()
+        : session === 'sprint_qualifying'
+        ? new Date(weekend.sprint_qualifying_deadline ?? weekend.sprint_deadline).getTime()
         : session === 'sprint'
         ? new Date(weekend.sprint_deadline).getTime()
         : new Date(weekend.race_deadline).getTime()
@@ -200,6 +218,8 @@ export default function PicksPage() {
           Lock: {new Date(
             session === 'qualifying'
               ? weekend?.qualifying_deadline ?? ''
+              : session === 'sprint_qualifying'
+              ? weekend?.sprint_qualifying_deadline ?? weekend?.sprint_deadline ?? ''
               : session === 'sprint'
               ? weekend?.sprint_deadline ?? ''
               : weekend?.race_deadline ?? '',
@@ -255,6 +275,7 @@ export default function PicksPage() {
 
       <div className="grid">
         {renderSession('qualifying')}
+        {renderSession('sprint_qualifying')}
         {renderSession('sprint')}
         {renderSession('race')}
       </div>

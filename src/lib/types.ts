@@ -14,6 +14,7 @@ export interface Weekend {
   round: number
   grand_prix: string
   qualifying_deadline: string
+  sprint_qualifying_deadline?: string
   sprint_deadline: string
   race_deadline: string
 }

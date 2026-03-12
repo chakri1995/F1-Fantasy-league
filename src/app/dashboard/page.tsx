@@ -13,7 +13,7 @@ interface LeaderboardRow {
 }
 
 interface PickCount {
-  session_type: 'qualifying' | 'sprint' | 'race'
+  session_type: 'qualifying' | 'sprint_qualifying' | 'sprint' | 'race'
   count: number
 }
 
@@ -91,6 +91,7 @@ export default function DashboardPage() {
 
         const grouped: PickCount[] = [
           { session_type: 'qualifying', count: 0 },
+          { session_type: 'sprint_qualifying', count: 0 },
           { session_type: 'sprint', count: 0 },
           { session_type: 'race', count: 0 },
         ]
@@ -148,6 +149,7 @@ export default function DashboardPage() {
               <p className="small" style={{ marginTop: '0.4rem' }}>
                 Quali lock: {new Date(nextWeekend.qualifying_deadline).toLocaleString()}
               </p>
+              <p className="small">Sprint‑Quali lock: {new Date(nextWeekend.sprint_qualifying_deadline ?? nextWeekend.sprint_deadline).toLocaleString()}</p>
               <p className="small">Sprint lock: {new Date(nextWeekend.sprint_deadline).toLocaleString()}</p>
               <p className="small">Race lock: {new Date(nextWeekend.race_deadline).toLocaleString()}</p>
 

@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'race_weekends row not found for season/round' }, { status: 404 })
     }
 
-    const sessions: SessionType[] = ['qualifying', 'sprint', 'race']
+    const sessions: SessionType[] = ['qualifying', 'sprint_qualifying', 'sprint', 'race']
     let totalRows = 0
 
     for (const session of sessions) {

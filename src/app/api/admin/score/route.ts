@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { calculatePositionPoints, DNF_PENALTY, isDnfStatus } from '@/lib/scoring'
+import { calculatePositionPoints, DNF_PENALTY, isDnfStatus, SessionType } from '@/lib/scoring'
 import { createSupabaseAnonClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
 async function ensureAdmin(request: NextRequest): Promise<{ ok: true } | { ok: false; error: NextResponse }> {
@@ -83,14 +83,20 @@ export async function POST(request: NextRequest) {
       driverMap.set(driver.id, driver.full_name)
     }
 
+    // build a set of rows for each pick; we'll later apply bonuses on top of this array
     const rows = (picks ?? []).map((pick) => {
       const key = `${pick.session_type}:${pick.driver_id}`
       const result = resultMap.get(key)
 
-      let points = result ? calculatePositionPoints(pick.predicted_position, result.position) : 0
+      // session-specific scoring
+      let points = 0
+      if (result) {
+        points = calculatePositionPoints(pick.predicted_position, result.position, pick.session_type as any)
+      }
       let penaltyReason: string | null = null
 
-      if ((pick.session_type === 'sprint' || pick.session_type === 'race') && result && isDnfStatus(result.status)) {
+      // apply DNF penalty for any session when the driver didn't finish
+      if (result && isDnfStatus(result.status)) {
         points += DNF_PENALTY
         penaltyReason = `DNF ${DNF_PENALTY}`
       }
@@ -107,6 +113,48 @@ export async function POST(request: NextRequest) {
         penalty_reason: penaltyReason,
       }
     })
+
+    // calculate bonuses per user/session and across sessions
+    const groupByUserSession = new Map<string, typeof rows>()
+    for (const row of rows) {
+      const key = `${row.user_id}:${row.session_type}`
+      if (!groupByUserSession.has(key)) groupByUserSession.set(key, [])
+      groupByUserSession.get(key)!.push(row)
+    }
+
+    const usersWithPerfectPodium = new Set<string>()
+
+    for (const [key, sessionRows] of groupByUserSession.entries()) {
+      const [userId, sessionType] = key.split(':')
+      // check if session has exactly three podium picks and they all matched
+      const podium = sessionRows.filter((r) => r.predicted_position <= 3)
+      if (podium.length === 3 && podium.every((r) => r.actual_position === r.predicted_position)) {
+        usersWithPerfectPodium.add(userId)
+        // award 10 bonus points to the first podium row for visibility
+        podium[0].points += 10
+        podium[0].penalty_reason = (podium[0].penalty_reason ?? '') + ' + podium bonus'
+      }
+    }
+
+    // check cross-session podium bonus: if a user had a perfect podium in every session for the weekend
+    const sessionsPresent = new Set<SessionType>((picks ?? []).map((p) => p.session_type as SessionType))
+    for (const userId of Array.from(usersWithPerfectPodium)) {
+      const userHasAll = ['qualifying', 'sprint_qualifying', 'sprint', 'race'].every(
+        (s) => groupByUserSession.has(`${userId}:${s}`) &&
+          groupByUserSession.get(`${userId}:${s}`)!.filter((r) => r.predicted_position <= 3).length === 3 &&
+          groupByUserSession
+            .get(`${userId}:${s}`)!
+            .every((r) => r.predicted_position <= 3 ? r.actual_position === r.predicted_position : true),
+      )
+      if (userHasAll) {
+        // give 50 points once on the first row for that user
+        const firstRow = rows.find((r) => r.user_id === userId)
+        if (firstRow) {
+          firstRow.points += 50
+          firstRow.penalty_reason = (firstRow.penalty_reason ?? '') + ' + all-podiums bonus'
+        }
+      }
+    }
 
     if (rows.length > 0) {
       const { error } = await serviceClient.from('score_events').insert(rows)

@@ -30,8 +30,17 @@ function parseList(session: SessionType, body: ErgastResponse): ParsedResult[] {
   const race = body.MRData?.RaceTable?.Races?.[0]
   if (!race) return []
 
-  const raw =
-    session === 'qualifying' ? race.QualifyingResults ?? [] : session === 'sprint' ? race.SprintResults ?? [] : race.Results ?? []
+  let raw: any[] = []
+  if (session === 'qualifying') {
+    raw = race.QualifyingResults ?? []
+  } else if (session === 'sprint_qualifying') {
+    // Some Ergast wrappers use SprintQualifyingResults; fallback to SprintResults if absent
+    raw = (race as any).SprintQualifyingResults ?? race.SprintResults ?? []
+  } else if (session === 'sprint') {
+    raw = race.SprintResults ?? []
+  } else {
+    raw = race.Results ?? []
+  }
 
   return raw
     .map((item: any) => {
@@ -57,6 +66,8 @@ export async function fetchSessionResults(season: number, round: number, session
   const endpoint =
     session === 'qualifying'
       ? `https://api.jolpi.ca/ergast/f1/${season}/${round}/qualifying.json`
+      : session === 'sprint_qualifying'
+      ? `https://api.jolpi.ca/ergast/f1/${season}/${round}/sprint-qualifying.json`
       : session === 'sprint'
       ? `https://api.jolpi.ca/ergast/f1/${season}/${round}/sprint.json`
       : `https://api.jolpi.ca/ergast/f1/${season}/${round}/results.json`

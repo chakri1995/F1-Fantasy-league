@@ -1,17 +1,33 @@
-export type SessionType = 'qualifying' | 'sprint' | 'race'
+export type SessionType = 'qualifying' | 'sprint_qualifying' | 'sprint' | 'race'
 
+// base points for an exact match or small differences; same mapping regardless of session
 const POINTS_BY_DIFF: Record<number, number> = {
   0: 12,
   1: 8,
   2: 5,
   3: 2,
+  // additional diffs exist but map to 0 unless the max limit allows them
 }
 
-export const DNF_PENALTY = -3
+// maximum allowed diff per session before returning zero
+const MAX_DIFF: Record<SessionType, number> = {
+  qualifying: 3,
+  sprint_qualifying: 3,
+  sprint: 5,
+  race: 10,
+}
 
-export function calculatePositionPoints(predictedPosition: number, actualPosition: number): number {
+// penalty applied when a selected driver DNF's
+export const DNF_PENALTY = -5
+
+export function calculatePositionPoints(
+  predictedPosition: number,
+  actualPosition: number,
+  session: SessionType,
+): number {
   const diff = Math.abs(predictedPosition - actualPosition)
-  if (diff > 3) {
+  const max = MAX_DIFF[session]
+  if (diff > max) {
     return 0
   }
   return POINTS_BY_DIFF[diff] ?? 0

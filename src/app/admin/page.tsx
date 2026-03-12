@@ -108,7 +108,7 @@ export default function AdminPage() {
           </div>
 
           <button style={{ marginTop: '0.8rem' }} type="submit">
-            Sync Quali + Sprint + Race
+            Sync Quali + Sprint‑Quali + Sprint + Race
           </button>
         </form>
 

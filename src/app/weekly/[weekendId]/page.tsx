@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 
 interface EventRow {
-  session_type: 'qualifying' | 'sprint' | 'race'
+  session_type: 'qualifying' | 'sprint_qualifying' | 'sprint' | 'race'
   predicted_position: number
   actual_position: number | null
   points: number
@@ -15,7 +15,7 @@ interface EventRow {
 }
 
 interface SessionSummary {
-  session_type: 'qualifying' | 'sprint' | 'race'
+  session_type: 'qualifying' | 'sprint_qualifying' | 'sprint' | 'race'
   points: number
 }
 
@@ -64,6 +64,7 @@ export default function WeeklyBreakdownPage() {
   const summary = useMemo(() => {
     const base: SessionSummary[] = [
       { session_type: 'qualifying', points: 0 },
+      { session_type: 'sprint_qualifying', points: 0 },
       { session_type: 'sprint', points: 0 },
       { session_type: 'race', points: 0 },
     ]
