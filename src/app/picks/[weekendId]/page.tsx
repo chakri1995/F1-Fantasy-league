@@ -50,6 +50,8 @@ export default function PicksPage() {
   const [unsavedSessions, setUnsavedSessions] = useState<Set<SessionType>>(new Set())
   const [status, setStatus] = useState('Loading...')
   const [dragOverSlot, setDragOverSlot] = useState<number | null>(null)
+  // Click-to-move: track which slot index is "selected" (null = none)
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -184,7 +186,9 @@ export default function PicksPage() {
 
   function getDriverLastName(driverId: string) {
     const name = getDriverById(driverId)?.full_name ?? ''
-    return name.split(' ').slice(1).join(' ') || name
+    // Return only the last word (e.g. "Kimi Antonelli" → "Antonelli")
+    const parts = name.trim().split(' ')
+    return parts[parts.length - 1] || name
   }
 
   function validateUnique(picks: string[]): boolean {
@@ -254,10 +258,19 @@ export default function PicksPage() {
     }
   }
 
+  // ── Shared picks mutation helper ──
+  function applyPicksChange(session: SessionType, picks: string[]) {
+    setSessionPicks(session, picks)
+    setUnsavedSessions((prev) => new Set(prev).add(session))
+    setSavedSessions((prev) => { const n = new Set(prev); n.delete(session); return n })
+  }
+
   // ── Drag and drop handlers ──
   const onDragStart = (event: React.DragEvent, driverId: string, origin: 'pool' | 'slot', idx?: number) => {
     event.dataTransfer.setData('text/plain', JSON.stringify({ driverId, origin, idx }))
     event.dataTransfer.effectAllowed = 'move'
+    // Clear any click-selection when drag starts
+    setSelectedSlot(null)
   }
 
   const onDropSlot = (event: React.DragEvent, slotIdx: number) => {
@@ -272,22 +285,16 @@ export default function PicksPage() {
 
     if (origin === 'slot' && typeof idx === 'number') {
       if (idx === slotIdx) return
-      // Swap: put dragged driver into new slot, clear old slot
+      // Swap slots
       const displaced = picks[slotIdx]
       picks[slotIdx] = picks[idx]
       picks[idx] = displaced
     } else {
-      // From pool: if slot already has a driver, clear it (goes back to pool)
+      // From pool → place into slot
       picks[slotIdx] = driverId
     }
 
-    setSessionPicks(activeSession, picks)
-    setUnsavedSessions((prev) => new Set(prev).add(activeSession))
-    setSavedSessions((prev) => {
-      const n = new Set(prev)
-      n.delete(activeSession)
-      return n
-    })
+    applyPicksChange(activeSession, picks)
   }
 
   const allowDrop = (event: React.DragEvent) => {
@@ -295,11 +302,51 @@ export default function PicksPage() {
     event.dataTransfer.dropEffect = 'move'
   }
 
+  // ── Click-to-move handlers ──
+  // Click a filled slot → select it (highlighted)
+  // Click another slot → swap them
+  // Click an empty slot with selection → move selected driver there
+  // Click a pool driver with slot selected → place that driver in the selected slot
+  // Click same slot again → deselect
+  const onSlotClick = (slotIdx: number) => {
+    if (locks[activeSession]) return
+    const picks = getSessionPicks(activeSession)
+
+    if (selectedSlot === null) {
+      // Nothing selected yet — select this slot (only if filled)
+      if (picks[slotIdx]) setSelectedSlot(slotIdx)
+    } else {
+      // Something already selected — perform move/swap
+      if (selectedSlot === slotIdx) {
+        // Clicked same slot: deselect
+        setSelectedSlot(null)
+        return
+      }
+      const next = [...picks]
+      // Swap: works whether target is empty or filled
+      const temp = next[slotIdx]
+      next[slotIdx] = next[selectedSlot]
+      next[selectedSlot] = temp
+      applyPicksChange(activeSession, next)
+      setSelectedSlot(null)
+    }
+  }
+
+  const onPoolDriverClick = (driverId: string) => {
+    if (locks[activeSession]) return
+    if (selectedSlot === null) return  // no slot selected, do nothing
+    const picks = [...getSessionPicks(activeSession)]
+    picks[selectedSlot] = driverId
+    applyPicksChange(activeSession, picks)
+    setSelectedSlot(null)
+  }
+
   function renderSession(session: SessionType) {
     const config = SESSION_RULES[session]
     const picks = getSessionPicks(session)
     const pool = getAvailableDrivers(session)
     const isLocked = locks[session]
+    const hasSelection = selectedSlot !== null && session === activeSession
 
     const deadlineStr = new Date(getDeadline(session)).toLocaleString(undefined, {
       month: 'short',
@@ -324,6 +371,13 @@ export default function PicksPage() {
           )}
         </div>
 
+        {/* Hint when a slot is selected */}
+        {hasSelection && !isLocked && (
+          <div style={{ marginBottom: '0.75rem', padding: '0.4rem 0.75rem', background: 'rgba(232,0,45,0.1)', border: '1px solid rgba(232,0,45,0.3)', borderRadius: '6px', fontSize: 'var(--font-xs)', color: 'var(--brand)', fontWeight: 600 }}>
+            P{selectedSlot! + 1} selected — click another slot to swap, or click a driver to place them here. Click same slot to cancel.
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
           {/* Available drivers pool */}
           <div>
@@ -336,9 +390,14 @@ export default function PicksPage() {
                   key={d.id}
                   draggable={!isLocked}
                   onDragStart={(e) => onDragStart(e, d.id, 'pool')}
-                  className={`driver-tile${isLocked ? ' locked' : ''}`}
-                  style={{ '--team-color': TEAM_COLORS[d.team_name] ?? '#444' } as React.CSSProperties}
-                  title={d.full_name}
+                  onClick={() => onPoolDriverClick(d.id)}
+                  className={`driver-tile${isLocked ? ' locked' : ''}${hasSelection ? ' pool-clickable' : ''}`}
+                  style={{
+                    '--team-color': TEAM_COLORS[d.team_name] ?? '#444',
+                    cursor: isLocked ? 'default' : hasSelection ? 'pointer' : 'grab',
+                    outline: hasSelection ? '1px dashed var(--brand)' : 'none',
+                  } as React.CSSProperties}
+                  title={hasSelection ? `Place ${d.full_name} in P${selectedSlot! + 1}` : d.full_name}
                 >
                   <span className="driver-code">{d.code}</span>
                   <span className="driver-name-sm">{getDriverLastName(d.id)}</span>
@@ -359,6 +418,7 @@ export default function PicksPage() {
               {Array.from({ length: config.size }, (_, i) => {
                 const filled = Boolean(picks[i])
                 const isOver = dragOverSlot === i
+                const isSelected = selectedSlot === i
 
                 return (
                   <div
@@ -368,7 +428,9 @@ export default function PicksPage() {
                     onDrop={(e) => onDropSlot(e, i)}
                     draggable={filled && !isLocked}
                     onDragStart={(e) => filled && onDragStart(e, picks[i], 'slot', i)}
-                    className={`pick-slot${filled ? ' filled' : ''}${isOver ? ' drag-over' : ''}`}
+                    onClick={() => onSlotClick(i)}
+                    className={`pick-slot${filled ? ' filled' : ''}${isOver ? ' drag-over' : ''}${isSelected ? ' selected' : ''}`}
+                    style={{ cursor: isLocked ? 'default' : filled ? 'pointer' : hasSelection ? 'pointer' : 'default' }}
                   >
                     <p className="pick-slot-pos">P{i + 1}</p>
                     {filled ? (
@@ -382,6 +444,7 @@ export default function PicksPage() {
                             className="pick-slot-remove"
                             onClick={(e) => {
                               e.stopPropagation()
+                              setSelectedSlot(null)
                               updatePick(session, i + 1, '')
                             }}
                             title="Remove"
@@ -391,7 +454,7 @@ export default function PicksPage() {
                         )}
                       </>
                     ) : (
-                      <p className="pick-slot-empty-hint">drag here</p>
+                      <p className="pick-slot-empty-hint">{hasSelection ? 'move here' : 'drag here'}</p>
                     )}
                   </div>
                 )

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" fill="none">
+  <!-- Speed slash background -->
+  <polygon points="0,0 180,0 160,56 0,56" fill="#e8002d"/>
+  <polygon points="168,0 220,0 220,56 148,56" fill="#1a1a1a"/>
+
+  <!-- Checkered flag accent (top-right corner) -->
+  <rect x="168" y="0"  width="13" height="14" fill="#e8002d"/>
+  <rect x="181" y="0"  width="13" height="14" fill="#1a1a1a"/>
+  <rect x="194" y="0"  width="13" height="14" fill="#e8002d"/>
+  <rect x="207" y="0"  width="13" height="14" fill="#1a1a1a"/>
+  <rect x="168" y="14" width="13" height="14" fill="#1a1a1a"/>
+  <rect x="181" y="14" width="13" height="14" fill="#e8002d"/>
+  <rect x="194" y="14" width="13" height="14" fill="#1a1a1a"/>
+  <rect x="207" y="14" width="13" height="14" fill="#e8002d"/>
+  <rect x="168" y="28" width="13" height="14" fill="#e8002d"/>
+  <rect x="181" y="28" width="13" height="14" fill="#1a1a1a"/>
+  <rect x="194" y="28" width="13" height="14" fill="#e8002d"/>
+  <rect x="207" y="28" width="13" height="14" fill="#1a1a1a"/>
+  <rect x="168" y="42" width="13" height="14" fill="#1a1a1a"/>
+  <rect x="181" y="42" width="13" height="14" fill="#e8002d"/>
+  <rect x="194" y="42" width="13" height="14" fill="#1a1a1a"/>
+  <rect x="207" y="42" width="13" height="14" fill="#e8002d"/>
+
+  <!-- Speed lines (white streaks) -->
+  <line x1="4"  y1="18" x2="24"  y2="18" stroke="rgba(255,255,255,0.18)" stroke-width="2"/>
+  <line x1="2"  y1="26" x2="16"  y2="26" stroke="rgba(255,255,255,0.12)" stroke-width="1.5"/>
+  <line x1="5"  y1="34" x2="20"  y2="34" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+
+  <!-- "F1" bold text -->
+  <text x="16" y="40"
+    font-family="'Arial Black','Impact','Franklin Gothic Heavy',sans-serif"
+    font-weight="900"
+    font-size="34"
+    fill="#ffffff"
+    letter-spacing="-1">F1</text>
+
+  <!-- "FANTASY" text -->
+  <text x="72" y="36"
+    font-family="'Arial','Helvetica Neue',sans-serif"
+    font-weight="700"
+    font-size="17"
+    fill="#ffffff"
+    letter-spacing="3">FANTASY</text>
+
+  <!-- Thin underline accent under FANTASY -->
+  <rect x="72" y="40" width="82" height="2" fill="rgba(255,255,255,0.5)" rx="1"/>
+</svg>

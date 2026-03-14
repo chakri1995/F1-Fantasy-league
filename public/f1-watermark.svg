@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" fill="none">
+  <!-- Large F1 speed-slash watermark shape -->
+  <!-- Red speed wedge -->
+  <polygon points="0,0 220,0 175,300 0,300" fill="#e8002d" opacity="0.85"/>
+  <!-- Dark wedge right -->
+  <polygon points="210,0 300,0 300,300 165,300" fill="#1a1a1a" opacity="0.85"/>
+
+  <!-- Checkered blocks top-right -->
+  <rect x="210" y="0"   width="30" height="30" fill="#e8002d" opacity="0.7"/>
+  <rect x="240" y="0"   width="30" height="30" fill="#ffffff" opacity="0.15"/>
+  <rect x="270" y="0"   width="30" height="30" fill="#e8002d" opacity="0.7"/>
+  <rect x="210" y="30"  width="30" height="30" fill="#ffffff" opacity="0.15"/>
+  <rect x="240" y="30"  width="30" height="30" fill="#e8002d" opacity="0.7"/>
+  <rect x="270" y="30"  width="30" height="30" fill="#ffffff" opacity="0.15"/>
+  <rect x="210" y="60"  width="30" height="30" fill="#e8002d" opacity="0.7"/>
+  <rect x="240" y="60"  width="30" height="30" fill="#ffffff" opacity="0.15"/>
+  <rect x="270" y="60"  width="30" height="30" fill="#e8002d" opacity="0.7"/>
+
+  <!-- F1 text -->
+  <text x="18" y="220"
+    font-family="'Arial Black','Impact',sans-serif"
+    font-weight="900"
+    font-size="190"
+    fill="#ffffff"
+    opacity="0.25"
+    letter-spacing="-8">F1</text>
+</svg>

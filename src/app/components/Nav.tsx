@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -86,8 +87,8 @@ export default function Nav() {
 
   return (
     <nav className="site-nav">
-      <Link href="/" className="site-nav-brand">
-        F1 Fantasy
+      <Link href="/" className="site-nav-brand" style={{ display: 'flex', alignItems: 'center' }}>
+        <Image src="/logo.svg" alt="F1 Fantasy" width={110} height={28} priority style={{ height: '28px', width: 'auto' }} />
       </Link>
 
       <div className="site-nav-links">

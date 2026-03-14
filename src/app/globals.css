@@ -77,6 +77,23 @@ body::before {
   z-index: 0;
 }
 
+/* F1 watermark — faint logo in bottom-right corner of every page */
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -40px;
+  right: -40px;
+  width: 340px;
+  height: 340px;
+  background-image: url('/f1-watermark.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: bottom right;
+  opacity: 0.045;
+  pointer-events: none;
+  z-index: 0;
+}
+
 body > * {
   position: relative;
   z-index: 1;
@@ -703,6 +720,13 @@ button.secondary:hover:not(:disabled) {
 .pick-slot.drag-over {
   border-color: var(--brand);
   background: rgba(232, 0, 45, 0.05);
+}
+
+.pick-slot.selected {
+  border-color: var(--brand);
+  border-style: solid;
+  background: rgba(232, 0, 45, 0.08);
+  box-shadow: 0 0 0 2px rgba(232, 0, 45, 0.35);
 }
 
 .pick-slot.filled {
