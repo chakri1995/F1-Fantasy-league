@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
 import type { Weekend } from '@/lib/types'
@@ -29,11 +29,32 @@ const SESSION_LABELS: Record<string, string> = {
   race: 'Race',
 }
 
-function formatWeekendDates(w: Weekend): string {
-  const start = new Date(w.qualifying_deadline)
-  const end = new Date(w.race_deadline)
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
-  return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`
+type RaceStatus = 'completed' | 'live' | 'next' | 'upcoming'
+
+function getRaceStatus(w: Weekend, nextUpcomingId: string | null): RaceStatus {
+  const now = Date.now()
+  const raceDeadline = new Date(w.race_deadline).getTime()
+  const qualiDeadline = new Date(w.qualifying_deadline).getTime()
+
+  if (now >= raceDeadline) return 'completed'
+  // "live" = quali has passed but race hasn't yet
+  if (now >= qualiDeadline) return 'live'
+  // "next" = the nearest future race
+  if (w.id === nextUpcomingId) return 'next'
+  return 'upcoming'
+}
+
+function getRaceStatusLabel(status: RaceStatus): string {
+  if (status === 'completed') return '✓ Completed'
+  if (status === 'live') return '⬤ Race Week'
+  if (status === 'next') return '▶ Next Race'
+  return '● Upcoming'
+}
+
+function formatRaceDate(w: Weekend): string {
+  // Show the race date (race_deadline is just after the race ends — use it as proxy for race day)
+  const raceDate = new Date(w.race_deadline)
+  return raceDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function groupBreakdownByWeekend(
@@ -64,6 +85,7 @@ export default function HomePage() {
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const configured = isSupabaseConfigured()
+  const nextCardRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -93,6 +115,13 @@ export default function HomePage() {
 
     load()
   }, [router])
+
+  // Scroll "next" card into view once weekends load
+  useEffect(() => {
+    if (nextCardRef.current) {
+      nextCardRef.current.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    }
+  }, [weekends])
 
   const toggleUser = async (userId: string) => {
     if (!supabase) return
@@ -133,34 +162,50 @@ export default function HomePage() {
     )
   }
 
+  // Find the first upcoming (not yet completed) race — this is "next"
+  const now = Date.now()
+  const nextUpcoming = weekends.find((w) => now < new Date(w.race_deadline).getTime())
+  const nextUpcomingId = nextUpcoming?.id ?? null
+
   return (
     <main className="container">
 
-      {/* ── Race Cards Strip ── */}
-      <p className="section-header" style={{ marginBottom: '0.75rem' }}>Race Calendar</p>
+      {/* ── Race Calendar Strip ── */}
+      <p className="section-header" style={{ marginBottom: '0.75rem' }}>
+        {weekends.length > 0 ? `${weekends[0].season} Season` : 'Race Calendar'}
+      </p>
+
       <div className="race-strip">
         {weekends.length === 0 && (
           <p className="small">No race weekends configured yet.</p>
         )}
         {weekends.map((w) => {
-          const completed = Date.now() >= new Date(w.race_deadline).getTime()
+          const status = getRaceStatus(w, nextUpcomingId)
+          const isNext = status === 'next'
+          const isLive = status === 'live'
+          const isCompleted = status === 'completed'
+
           return (
-            <div key={w.id} className={`race-card ${completed ? 'completed' : 'upcoming'}`}>
-              <p className="race-card-round">
-                {w.season} · Round {w.round}
-              </p>
+            <div
+              key={w.id}
+              ref={isNext ? nextCardRef : null}
+              className={`race-card ${status}`}
+            >
+              <p className="race-card-round">Round {w.round}</p>
               <p className="race-card-name">{w.grand_prix}</p>
-              <p className="race-card-dates">{formatWeekendDates(w)}</p>
-              <p className={`race-card-status ${completed ? 'completed' : 'upcoming'}`}>
-                {completed ? '✓ Completed' : '● Upcoming'}
+              <p className="race-card-dates">{formatRaceDate(w)}</p>
+              <p className={`race-card-status ${status}`}>
+                {getRaceStatusLabel(status)}
               </p>
-              {completed ? (
+              {isCompleted ? (
                 <Link href={`/weekly/${w.id}`}>
                   <button className="secondary race-card-btn">View Results</button>
                 </Link>
               ) : (
                 <Link href={`/picks/${w.id}`}>
-                  <button className="race-card-btn">Make Picks</button>
+                  <button className={`race-card-btn${isLive || isNext ? '' : ' secondary'}`}>
+                    {isLive ? 'Pick Now' : 'Make Picks'}
+                  </button>
                 </Link>
               )}
             </div>

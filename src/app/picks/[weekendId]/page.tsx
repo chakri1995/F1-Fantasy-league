@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import type { Driver, Weekend } from '@/lib/types'
@@ -414,11 +415,27 @@ export default function PicksPage() {
     ? `${weekend.season} Round ${weekend.round} — ${weekend.grand_prix}`
     : 'Make Picks'
 
+  const allSessionsLocked = weekend
+    ? Object.values(locks).every(Boolean)
+    : false
+
   return (
     <main className="container">
       <h1 className="section-header" style={{ marginBottom: '1.5rem' }}>
         {weekendTitle}
       </h1>
+
+      {/* Banner when all sessions are locked */}
+      {allSessionsLocked && weekend && (
+        <div className="card" style={{ marginBottom: '1rem', borderLeft: '3px solid var(--status-complete)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <p className="small">All sessions are locked for this weekend.</p>
+          <Link href={`/weekly/${weekend.id}`}>
+            <button className="secondary" style={{ width: 'auto', padding: '0.4rem 0.85rem', fontSize: 'var(--font-xs)' }}>
+              View Results →
+            </button>
+          </Link>
+        </div>
+      )}
 
       {status && (
         <div className="card" style={{ marginBottom: '1rem', borderLeft: '3px solid var(--status-unsaved)' }}>
