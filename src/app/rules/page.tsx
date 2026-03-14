@@ -48,51 +48,101 @@ export default function RulesPage() {
 
       {/* ── Scoring ── */}
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <h2 style={{ marginBottom: '0.75rem' }}>Scoring</h2>
+        <h2 style={{ marginBottom: '0.4rem' }}>Scoring</h2>
         <p className="small" style={{ marginBottom: '1rem' }}>
-          Points are based on how close your prediction was to the actual finishing position.
-          The closer you are, the more points you earn.
+          An exact match always earns <strong style={{ color: 'var(--ink)' }}>10 points</strong>.
+          Each position you are off costs you points — but the penalty rate depends on the session.
+          Faster, shorter sessions penalise misses more heavily.
         </p>
 
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-sm)', marginBottom: '1rem' }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem', color: 'var(--muted)', fontSize: 'var(--font-xs)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--line)' }}>How far off</th>
-              <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem', color: 'var(--muted)', fontSize: 'var(--font-xs)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--line)' }}>Points</th>
-              <th style={{ textAlign: 'left', padding: '0.4rem 0.6rem', color: 'var(--muted)', fontSize: 'var(--font-xs)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--line)' }}>Example</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              { diff: 'Exact match', pts: '+12', example: 'You pick Norris P1, he finishes P1 ✓' },
-              { diff: '1 place off', pts: '+8', example: 'You pick Norris P1, he finishes P2' },
-              { diff: '2 places off', pts: '+5', example: 'You pick Norris P1, he finishes P3' },
-              { diff: '3 places off', pts: '+2', example: 'You pick Norris P1, he finishes P4' },
-              { diff: 'More than 3 off*', pts: '0', example: 'You pick Norris P1, he finishes P6' },
-              { diff: 'Driver DNF', pts: '−5', example: 'You picked Hamilton, he retired from the race' },
-            ].map((row) => (
-              <tr key={row.diff}>
-                <td style={{ padding: '0.5rem 0.6rem', borderBottom: '1px solid var(--line)', fontWeight: 600 }}>{row.diff}</td>
-                <td style={{ padding: '0.5rem 0.6rem', borderBottom: '1px solid var(--line)', fontWeight: 800, color: row.pts.startsWith('+') ? 'var(--status-saved)' : 'var(--brand)' }}>{row.pts}</td>
-                <td style={{ padding: '0.5rem 0.6rem', borderBottom: '1px solid var(--line)', color: 'var(--muted)', fontSize: 'var(--font-xs)' }}>{row.example}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {/* Formula callout */}
+        <div style={{ padding: '0.75rem 1rem', background: 'var(--bg-raised)', borderRadius: '8px', border: '1px solid var(--line-bright)', marginBottom: '1.25rem', fontFamily: 'monospace', fontSize: 'var(--font-sm)' }}>
+          <span style={{ color: 'var(--muted)' }}>points = </span>
+          <span style={{ color: 'var(--ink)', fontWeight: 700 }}>max(0,  10 − diff × decrement)</span>
+        </div>
 
-        <p className="small" style={{ marginBottom: '0.5rem' }}>
-          * The max offset varies by session: Qualifying and Sprint Qualifying allow up to 3 places off. Sprint allows up to 5. Race allows up to 10.
-        </p>
+        {/* Per-session tables side by side on wide screens */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+          {[
+            {
+              label: 'Qualifying & Sprint Quali',
+              decrement: 3,
+              color: '#6366f1',
+              rows: [
+                { diff: 0, pts: 10, example: 'Exact ✓' },
+                { diff: 1, pts: 7,  example: '1 off' },
+                { diff: 2, pts: 4,  example: '2 off' },
+                { diff: 3, pts: 1,  example: '3 off' },
+                { diff: 4, pts: 0,  example: '4+ off' },
+              ],
+            },
+            {
+              label: 'Sprint',
+              decrement: 2,
+              color: '#f59e0b',
+              rows: [
+                { diff: 0, pts: 10, example: 'Exact ✓' },
+                { diff: 1, pts: 8,  example: '1 off' },
+                { diff: 2, pts: 6,  example: '2 off' },
+                { diff: 3, pts: 4,  example: '3 off' },
+                { diff: 4, pts: 2,  example: '4 off' },
+                { diff: 5, pts: 0,  example: '5+ off' },
+              ],
+            },
+            {
+              label: 'Race',
+              decrement: 1,
+              color: 'var(--brand)',
+              rows: [
+                { diff: 0, pts: 10, example: 'Exact ✓' },
+                { diff: 1, pts: 9,  example: '1 off' },
+                { diff: 3, pts: 7,  example: '3 off' },
+                { diff: 5, pts: 5,  example: '5 off' },
+                { diff: 9, pts: 1,  example: '9 off' },
+                { diff: 10, pts: 0, example: '10+ off' },
+              ],
+            },
+          ].map((session) => (
+            <div key={session.label} style={{ background: 'var(--bg-raised)', borderRadius: '8px', border: '1px solid var(--line)', overflow: 'hidden' }}>
+              <div style={{ padding: '0.5rem 0.75rem', background: session.color, opacity: 0.9 }}>
+                <p style={{ fontWeight: 800, fontSize: 'var(--font-sm)', color: '#fff', margin: 0 }}>{session.label}</p>
+                <p style={{ fontSize: 'var(--font-xs)', color: 'rgba(255,255,255,0.8)', margin: 0 }}>−{session.decrement} per position off</p>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-sm)' }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '0.35rem 0.6rem', color: 'var(--muted)', fontSize: 'var(--font-xs)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--line)', textAlign: 'left' }}>Diff</th>
+                    <th style={{ padding: '0.35rem 0.6rem', color: 'var(--muted)', fontSize: 'var(--font-xs)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>Pts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {session.rows.map((r) => (
+                    <tr key={r.diff}>
+                      <td style={{ padding: '0.4rem 0.6rem', borderBottom: '1px solid var(--line)', color: 'var(--muted)', fontSize: 'var(--font-xs)' }}>{r.example}</td>
+                      <td style={{ padding: '0.4rem 0.6rem', borderBottom: '1px solid var(--line)', fontWeight: 800, textAlign: 'right', color: r.pts > 0 ? 'var(--status-saved)' : 'var(--muted)' }}>
+                        {r.pts > 0 ? `+${r.pts}` : r.pts}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
 
-        <div style={{ padding: '0.75rem', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-          <p style={{ fontSize: 'var(--font-xs)', color: '#f59e0b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.35rem' }}>
-            Race session example
-          </p>
-          <p className="small">
-            You pick Verstappen P4, he finishes P7 → that&apos;s 3 places off → <strong style={{ color: 'var(--ink)' }}>+2 pts</strong>.
-            In a Race (max offset 10), this still scores. In Qualifying (max offset 3), it would score the same.
-            But if he finished P8 (4 places off) in Qualifying, it would be <strong style={{ color: 'var(--ink)' }}>0 pts</strong>.
-          </p>
+        {/* DNF + example */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+          <div style={{ padding: '0.75rem', background: 'rgba(232,0,45,0.07)', borderRadius: '8px', border: '1px solid rgba(232,0,45,0.2)' }}>
+            <p style={{ fontSize: 'var(--font-xs)', color: 'var(--brand)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>Driver not in results</p>
+            <p className="small">If your picked driver doesn&apos;t appear in the scored positions, you get <strong style={{ color: 'var(--brand)' }}>−5 pts</strong>. This covers DNFs, DNS, and drivers outside the scored positions.</p>
+          </div>
+          <div style={{ padding: '0.75rem', background: 'rgba(245, 158, 11, 0.08)', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+            <p style={{ fontSize: 'var(--font-xs)', color: '#f59e0b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>Example</p>
+            <p className="small">
+              Race: You pick Verstappen P4, he finishes P7 → diff 3 → <strong style={{ color: 'var(--ink)' }}>10 − 3×1 = +7 pts</strong><br />
+              Qualifying: Same pick, diff 3 → <strong style={{ color: 'var(--ink)' }}>10 − 3×3 = +1 pt</strong>
+            </p>
+          </div>
         </div>
       </div>
 
