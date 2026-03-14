@@ -1,17 +1,9 @@
-import Link from 'next/link'
-
 export default function RulesPage() {
   return (
     <main className="container">
-      <div className="nav" style={{ marginBottom: '1rem', gap: '1rem' }}>
-        <h2 style={{ margin: 0 }}>Rules</h2>
-        <div className="nav-links">
-          <Link href="/" className="small">Home</Link>
-          <Link href="/picks" className="small">Picks</Link>
-        </div>
-      </div>
+      <h1 className="section-header" style={{ marginBottom: '1.25rem' }}>Rules</h1>
 
-      <div className="card" style={{ marginTop: '1rem' }}>
+      <div className="card">
         <h2>Pick structure</h2>
         <ul>
           <li>Qualifying: pick drivers for positions 1–3</li>

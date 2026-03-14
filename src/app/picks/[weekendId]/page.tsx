@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -8,10 +7,25 @@ import type { Driver, Weekend } from '@/lib/types'
 import type { SessionType } from '@/lib/scoring'
 
 const SESSION_RULES: Record<SessionType, { size: number; label: string }> = {
-  qualifying: { size: 3, label: 'Qualifying Top 3' },
-  sprint_qualifying: { size: 3, label: 'Sprint Qualifying Top 3' },
-  sprint: { size: 5, label: 'Sprint Top 5' },
-  race: { size: 10, label: 'Race Top 10' },
+  qualifying: { size: 3, label: 'Qualifying' },
+  sprint_qualifying: { size: 3, label: 'Sprint Quali' },
+  sprint: { size: 5, label: 'Sprint' },
+  race: { size: 10, label: 'Race' },
+}
+
+const SESSION_ORDER: SessionType[] = ['qualifying', 'sprint_qualifying', 'sprint', 'race']
+
+const TEAM_COLORS: Record<string, string> = {
+  'Red Bull Racing': '#3671C6',
+  Ferrari: '#E8002D',
+  McLaren: '#FF8000',
+  Mercedes: '#00A19C',
+  'Aston Martin': '#00594F',
+  Alpine: '#0093CC',
+  Williams: '#00A0DD',
+  Haas: '#B6BABD',
+  Sauber: '#00CF46',
+  'Racing Bulls': '#1434CB',
 }
 
 function buildDefault(size: number): string[] {
@@ -29,8 +43,12 @@ export default function PicksPage() {
   const [sprintQualifyingPicks, setSprintQualifyingPicks] = useState<string[]>(buildDefault(3))
   const [sprintPicks, setSprintPicks] = useState<string[]>(buildDefault(5))
   const [racePicks, setRacePicks] = useState<string[]>(buildDefault(10))
+
+  const [activeSession, setActiveSession] = useState<SessionType>('qualifying')
+  const [savedSessions, setSavedSessions] = useState<Set<SessionType>>(new Set())
+  const [unsavedSessions, setUnsavedSessions] = useState<Set<SessionType>>(new Set())
   const [status, setStatus] = useState('Loading...')
-  const [email, setEmail] = useState<string>('')
+  const [dragOverSlot, setDragOverSlot] = useState<number | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -48,19 +66,20 @@ export default function PicksPage() {
         return
       }
 
-      setEmail(user?.email ?? '')
-
-      const [{ data: driversData }, { data: weekendData, error: weekendError }, { data: picksData, error: picksError }] =
-        await Promise.all([
-          supabase.from('drivers').select('*').order('number', { ascending: true }),
-          supabase.from('race_weekends').select('*').eq('id', weekendId).single(),
-          supabase
-            .from('picks')
-            .select('*')
-            .eq('weekend_id', weekendId)
-            .eq('user_id', user.id)
-            .order('predicted_position', { ascending: true }),
-        ])
+      const [
+        { data: driversData },
+        { data: weekendData, error: weekendError },
+        { data: picksData, error: picksError },
+      ] = await Promise.all([
+        supabase.from('drivers').select('*').order('number', { ascending: true }),
+        supabase.from('race_weekends').select('*').eq('id', weekendId).single(),
+        supabase
+          .from('picks')
+          .select('*')
+          .eq('weekend_id', weekendId)
+          .eq('user_id', user.id)
+          .order('predicted_position', { ascending: true }),
+      ])
 
       if (weekendError) {
         setStatus(weekendError.message)
@@ -86,18 +105,24 @@ export default function PicksPage() {
         else if (pick.session_type === 'sprint_qualifying') target = sq
         else if (pick.session_type === 'sprint') target = s
         else if (pick.session_type === 'race') target = r
-
         if (!target) continue
         const idx = pick.predicted_position - 1
-        if (idx >= 0 && idx < target.length) {
-          target[idx] = pick.driver_id
-        }
+        if (idx >= 0 && idx < target.length) target[idx] = pick.driver_id
       }
 
       setQualifyingPicks(q)
       setSprintQualifyingPicks(sq)
       setSprintPicks(s)
       setRacePicks(r)
+
+      // Mark sessions that already have complete picks as saved
+      const initialSaved = new Set<SessionType>()
+      if (q.every(Boolean)) initialSaved.add('qualifying')
+      if (sq.every(Boolean)) initialSaved.add('sprint_qualifying')
+      if (s.every(Boolean)) initialSaved.add('sprint')
+      if (r.every(Boolean)) initialSaved.add('race')
+      setSavedSessions(initialSaved)
+
       setStatus('')
     }
 
@@ -108,7 +133,6 @@ export default function PicksPage() {
     if (!weekend) {
       return { qualifying: true, sprint_qualifying: true, sprint: true, race: true }
     }
-
     const now = Date.now()
     return {
       qualifying: now >= new Date(weekend.qualifying_deadline).getTime(),
@@ -118,34 +142,6 @@ export default function PicksPage() {
     }
   }, [weekend])
 
-  function updatePick(session: SessionType, position: number, driverId: string) {
-    const index = position - 1
-    if (session === 'qualifying') {
-      const next = [...qualifyingPicks]
-      next[index] = driverId
-      setQualifyingPicks(next)
-      return
-    }
-
-    if (session === 'sprint_qualifying') {
-      const next = [...sprintQualifyingPicks]
-      next[index] = driverId
-      setSprintQualifyingPicks(next)
-      return
-    }
-
-    if (session === 'sprint') {
-      const next = [...sprintPicks]
-      next[index] = driverId
-      setSprintPicks(next)
-      return
-    }
-
-    const next = [...racePicks]
-    next[index] = driverId
-    setRacePicks(next)
-  }
-
   function getSessionPicks(session: SessionType): string[] {
     if (session === 'qualifying') return qualifyingPicks
     if (session === 'sprint_qualifying') return sprintQualifyingPicks
@@ -153,9 +149,54 @@ export default function PicksPage() {
     return racePicks
   }
 
+  function setSessionPicks(session: SessionType, picks: string[]) {
+    if (session === 'qualifying') setQualifyingPicks(picks)
+    else if (session === 'sprint_qualifying') setSprintQualifyingPicks(picks)
+    else if (session === 'sprint') setSprintPicks(picks)
+    else setRacePicks(picks)
+  }
+
+  function updatePick(session: SessionType, position: number, driverId: string) {
+    const next = [...getSessionPicks(session)]
+    next[position - 1] = driverId
+    setSessionPicks(session, next)
+    setUnsavedSessions((prev) => new Set(prev).add(session))
+    setSavedSessions((prev) => {
+      const n = new Set(prev)
+      n.delete(session)
+      return n
+    })
+  }
+
+  function getAvailableDrivers(session: SessionType) {
+    const taken = new Set(getSessionPicks(session).filter(Boolean))
+    return drivers.filter((d) => !taken.has(d.id))
+  }
+
+  function getDriverById(driverId: string) {
+    return drivers.find((d) => d.id === driverId)
+  }
+
+  function getDriverCode(driverId: string) {
+    return getDriverById(driverId)?.code ?? '?'
+  }
+
+  function getDriverLastName(driverId: string) {
+    const name = getDriverById(driverId)?.full_name ?? ''
+    return name.split(' ').slice(1).join(' ') || name
+  }
+
   function validateUnique(picks: string[]): boolean {
     const chosen = picks.filter(Boolean)
     return new Set(chosen).size === chosen.length
+  }
+
+  function getDeadline(session: SessionType): number {
+    if (!weekend) return 0
+    if (session === 'qualifying') return new Date(weekend.qualifying_deadline).getTime()
+    if (session === 'sprint_qualifying') return new Date(weekend.sprint_qualifying_deadline ?? weekend.sprint_deadline).getTime()
+    if (session === 'sprint') return new Date(weekend.sprint_deadline).getTime()
+    return new Date(weekend.race_deadline).getTime()
   }
 
   async function saveSession(session: SessionType) {
@@ -171,27 +212,19 @@ export default function PicksPage() {
     }
 
     const picks = getSessionPicks(session)
+
     if (picks.some((item) => !item)) {
-      setStatus(`Complete all ${SESSION_RULES[session].size} picks for ${session}.`)
+      setStatus(`Fill all ${SESSION_RULES[session].size} positions for ${SESSION_RULES[session].label}.`)
       return
     }
 
     if (!validateUnique(picks)) {
-      setStatus(`Each driver can be selected only once for ${session}.`)
+      setStatus(`Each driver can only be picked once per session.`)
       return
     }
 
-    const lock =
-      session === 'qualifying'
-        ? new Date(weekend.qualifying_deadline).getTime()
-        : session === 'sprint_qualifying'
-        ? new Date(weekend.sprint_qualifying_deadline ?? weekend.sprint_deadline).getTime()
-        : session === 'sprint'
-        ? new Date(weekend.sprint_deadline).getTime()
-        : new Date(weekend.race_deadline).getTime()
-
-    if (Date.now() >= lock) {
-      setStatus(`${session} picks are locked.`)
+    if (Date.now() >= getDeadline(session)) {
+      setStatus(`${SESSION_RULES[session].label} picks are locked.`)
       return
     }
 
@@ -207,160 +240,227 @@ export default function PicksPage() {
       onConflict: 'weekend_id,user_id,session_type,predicted_position',
     })
 
-    setStatus(error ? error.message : `${session} picks saved.`)
+    if (error) {
+      setStatus(error.message)
+    } else {
+      setStatus('')
+      setSavedSessions((prev) => new Set(prev).add(session))
+      setUnsavedSessions((prev) => {
+        const n = new Set(prev)
+        n.delete(session)
+        return n
+      })
+    }
   }
 
-  function getAvailableDrivers(session: SessionType) {
-    const taken = new Set(getSessionPicks(session).filter(Boolean))
-    return drivers.filter((d) => !taken.has(d.id))
+  // ── Drag and drop handlers ──
+  const onDragStart = (event: React.DragEvent, driverId: string, origin: 'pool' | 'slot', idx?: number) => {
+    event.dataTransfer.setData('text/plain', JSON.stringify({ driverId, origin, idx }))
+    event.dataTransfer.effectAllowed = 'move'
+  }
+
+  const onDropSlot = (event: React.DragEvent, slotIdx: number) => {
+    event.preventDefault()
+    setDragOverSlot(null)
+    const data = event.dataTransfer.getData('text/plain')
+    if (!data) return
+    const { driverId, origin, idx } = JSON.parse(data) as { driverId: string; origin: string; idx?: number }
+    if (locks[activeSession]) return
+
+    const picks = [...getSessionPicks(activeSession)]
+
+    if (origin === 'slot' && typeof idx === 'number') {
+      if (idx === slotIdx) return
+      // Swap: put dragged driver into new slot, clear old slot
+      const displaced = picks[slotIdx]
+      picks[slotIdx] = picks[idx]
+      picks[idx] = displaced
+    } else {
+      // From pool: if slot already has a driver, clear it (goes back to pool)
+      picks[slotIdx] = driverId
+    }
+
+    setSessionPicks(activeSession, picks)
+    setUnsavedSessions((prev) => new Set(prev).add(activeSession))
+    setSavedSessions((prev) => {
+      const n = new Set(prev)
+      n.delete(activeSession)
+      return n
+    })
+  }
+
+  const allowDrop = (event: React.DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
   }
 
   function renderSession(session: SessionType) {
     const config = SESSION_RULES[session]
     const picks = getSessionPicks(session)
     const pool = getAvailableDrivers(session)
+    const isLocked = locks[session]
 
-    const onDragStart = (event: React.DragEvent, driverId: string, origin?: 'pool' | 'slot', idx?: number) => {
-      event.dataTransfer.setData('text/plain', JSON.stringify({ driverId, origin, idx }))
-    }
-    const onDropSlot = (event: React.DragEvent, slotIdx: number) => {
-      event.preventDefault()
-      const data = event.dataTransfer.getData('text/plain')
-      if (!data) return
-      const { driverId, origin, idx } = JSON.parse(data)
-      if (origin === 'slot' && idx === slotIdx) return
-      if (origin === 'slot' && typeof idx === 'number') {
-        const sourcePicks = getSessionPicks(session)
-        updatePick(session, slotIdx + 1, sourcePicks[idx])
-        updatePick(session, idx + 1, '')
-        return
-      }
-      updatePick(session, slotIdx + 1, driverId)
-    }
-    const allowDrop = (event: React.DragEvent) => event.preventDefault()
-
-    const getDriverName = (driverId: string) => {
-      const d = drivers.find((x) => x.id === driverId)
-      return d?.full_name || driverId
-    }
+    const deadlineStr = new Date(getDeadline(session)).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
 
     return (
-      <div className="card" key={session}>
-        <h2>{config.label}</h2>
-        <p className="small" style={{ marginTop: '0.35rem' }}>
-          Lock:{' '}
-          {new Date(
-            session === 'qualifying'
-              ? weekend?.qualifying_deadline ?? ''
-              : session === 'sprint_qualifying'
-              ? weekend?.sprint_qualifying_deadline ?? weekend?.sprint_deadline ?? ''
-              : session === 'sprint'
-              ? weekend?.sprint_deadline ?? ''
-              : weekend?.race_deadline ?? '',
-          ).toLocaleString()}
-        </p>
+      <div>
+        {/* Save status + deadline */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <p className="small">Lock: {deadlineStr}</p>
+          {isLocked ? (
+            <span className="save-indicator locked">&#128274; Locked</span>
+          ) : savedSessions.has(session) ? (
+            <span className="save-indicator saved">&#10003; Saved</span>
+          ) : unsavedSessions.has(session) ? (
+            <span className="save-indicator unsaved">&#9679; Unsaved</span>
+          ) : (
+            <span className="save-indicator unsaved">Not saved</span>
+          )}
+        </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginTop: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem' }}>
+          {/* Available drivers pool */}
           <div>
-            <h3 className="small" style={{ marginBottom: '0.5rem' }}>Available</h3>
+            <p style={{ fontSize: 'var(--font-xs)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.6rem', fontWeight: 700 }}>
+              Available ({pool.length})
+            </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
               {pool.map((d) => (
                 <div
                   key={d.id}
-                  draggable={!locks[session]}
+                  draggable={!isLocked}
                   onDragStart={(e) => onDragStart(e, d.id, 'pool')}
-                  style={{
-                    padding: '0.4rem 0.5rem',
-                    background: '#f0f0f0',
-                    borderRadius: '4px',
-                    cursor: !locks[session] ? 'grab' : 'default',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    minWidth: '40px',
-                    textAlign: 'center',
-                  }}
+                  className={`driver-tile${isLocked ? ' locked' : ''}`}
+                  style={{ '--team-color': TEAM_COLORS[d.team_name] ?? '#444' } as React.CSSProperties}
                   title={d.full_name}
                 >
-                  #{d.number}
+                  <span className="driver-code">{d.code}</span>
+                  <span className="driver-name-sm">{getDriverLastName(d.id)}</span>
                 </div>
               ))}
+              {pool.length === 0 && (
+                <p className="small">All drivers placed</p>
+              )}
             </div>
           </div>
 
+          {/* Position slots */}
           <div>
-            <h3 className="small" style={{ marginBottom: '0.5rem' }}>Positions</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '0.5rem' }}>
-              {Array.from({ length: config.size }, (_, i) => (
-                <div
-                  key={i}
-                  onDragOver={allowDrop}
-                  onDrop={(e) => onDropSlot(e, i)}
-                  draggable={!!picks[i] && !locks[session]}
-                  onDragStart={(e) => picks[i] && onDragStart(e, picks[i], 'slot', i)}
-                  style={{
-                    padding: '0.6rem',
-                    border: '2px dashed #ccc',
-                    borderRadius: '4px',
-                    minHeight: '80px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    textAlign: 'center',
-                    cursor: picks[i] ? 'grab' : 'drop',
-                    background: picks[i] ? '#e8f5e9' : '#fafafa',
-                  }}
-                >
-                  <p style={{ fontSize: '0.875rem', fontWeight: 600, margin: '0 0 0.25rem 0' }}>P{i + 1}</p>
-                  {picks[i] ? (
-                    <p style={{ fontSize: '0.75rem', margin: 0 }}>{getDriverName(picks[i])}</p>
-                  ) : (
-                    <p style={{ fontSize: '0.7rem', color: '#999', margin: 0 }}>drag here</p>
-                  )}
-                </div>
-              ))}
+            <p style={{ fontSize: 'var(--font-xs)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.6rem', fontWeight: 700 }}>
+              Your Picks — {config.label} Top {config.size}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '0.5rem' }}>
+              {Array.from({ length: config.size }, (_, i) => {
+                const filled = Boolean(picks[i])
+                const isOver = dragOverSlot === i
+
+                return (
+                  <div
+                    key={i}
+                    onDragOver={(e) => { allowDrop(e); setDragOverSlot(i) }}
+                    onDragLeave={() => setDragOverSlot(null)}
+                    onDrop={(e) => onDropSlot(e, i)}
+                    draggable={filled && !isLocked}
+                    onDragStart={(e) => filled && onDragStart(e, picks[i], 'slot', i)}
+                    className={`pick-slot${filled ? ' filled' : ''}${isOver ? ' drag-over' : ''}`}
+                  >
+                    <p className="pick-slot-pos">P{i + 1}</p>
+                    {filled ? (
+                      <>
+                        <p className="pick-slot-driver">{getDriverCode(picks[i])}</p>
+                        <p className="driver-name-sm" style={{ marginTop: '0.1rem' }}>
+                          {getDriverLastName(picks[i])}
+                        </p>
+                        {!isLocked && (
+                          <button
+                            className="pick-slot-remove"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              updatePick(session, i + 1, '')
+                            }}
+                            title="Remove"
+                          >
+                            &times;
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <p className="pick-slot-empty-hint">drag here</p>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
 
-        <button disabled={locks[session]} onClick={() => saveSession(session)} style={{ marginTop: '1rem' }}>
-          {locks[session] ? 'Locked' : `Save ${session}`}
+        <button
+          disabled={isLocked}
+          onClick={() => saveSession(session)}
+          style={{ marginTop: '1.25rem', maxWidth: '200px' }}
+        >
+          {isLocked ? 'Locked' : `Save ${config.label}`}
         </button>
       </div>
     )
   }
 
-  async function logout() {
-    if (!supabase) return
-    await supabase.auth.signOut()
-    router.push('/auth')
-  }
+  const weekendTitle = weekend
+    ? `${weekend.season} Round ${weekend.round} — ${weekend.grand_prix}`
+    : 'Make Picks'
 
   return (
     <main className="container">
-      <div className="nav" style={{ marginBottom: '1rem', gap: '1rem' }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Make Picks</h2>
-          <p className="small" style={{ margin: '0.25rem 0 0 0' }}>{email}</p>
-        </div>
-        <div className="nav-links">
-          <Link href="/" className="small">Home</Link>
-          <Link href="/rules" className="small">Rules</Link>
-          <button className="secondary" style={{ width: 'auto' }} onClick={logout}>Logout</button>
-        </div>
-      </div>
+      <h1 className="section-header" style={{ marginBottom: '1.5rem' }}>
+        {weekendTitle}
+      </h1>
 
       {status && (
-        <div className="card" style={{ marginBottom: '1rem' }}>
+        <div className="card" style={{ marginBottom: '1rem', borderLeft: '3px solid var(--status-unsaved)' }}>
           <p className="small">{status}</p>
         </div>
       )}
 
-      <div className="grid">
-        {renderSession('qualifying')}
-        {renderSession('sprint_qualifying')}
-        {renderSession('sprint')}
-        {renderSession('race')}
+      {/* Session tabs */}
+      <div className="session-tabs">
+        {SESSION_ORDER.map((session) => {
+          const isLocked = locks[session]
+          const isSaved = savedSessions.has(session)
+          const isUnsaved = unsavedSessions.has(session)
+          const isActive = activeSession === session
+
+          let indicator = ''
+          if (isLocked) indicator = ' 🔒'
+          else if (isSaved) indicator = ' ✓'
+          else if (isUnsaved) indicator = ' ●'
+
+          return (
+            <button
+              key={session}
+              className={[
+                'session-tab',
+                isActive ? 'active' : '',
+                isLocked ? 'locked' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              onClick={() => setActiveSession(session)}
+            >
+              {SESSION_RULES[session].label}
+              {indicator}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Active session panel */}
+      <div className="card">
+        {renderSession(activeSession)}
       </div>
     </main>
   )

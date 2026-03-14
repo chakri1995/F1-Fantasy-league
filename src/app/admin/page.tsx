@@ -1,7 +1,6 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 
@@ -69,12 +68,7 @@ export default function AdminPage() {
 
   return (
     <main className="container">
-      <div className="nav">
-        <h1>Admin Console</h1>
-        <div className="nav-links">
-          <Link href="/dashboard" className="small">Dashboard</Link>
-        </div>
-      </div>
+      <h1 className="section-header" style={{ marginBottom: '1.25rem' }}>Admin Console</h1>
 
       <div className="grid two">
         <form className="card" onSubmit={syncResults}>

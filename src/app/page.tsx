@@ -1,4 +1,5 @@
 'use client'
+
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -13,7 +14,7 @@ interface LeaderboardRow {
 
 interface BreakdownRow {
   weekend_id: string
-  session_type: string
+  session_type: 'qualifying' | 'sprint_qualifying' | 'sprint' | 'race'
   predicted_position: number
   actual_position: number | null
   points: number
@@ -21,9 +22,42 @@ interface BreakdownRow {
   driver_name: string
 }
 
+const SESSION_LABELS: Record<string, string> = {
+  qualifying: 'Qualifying',
+  sprint_qualifying: 'Sprint Quali',
+  sprint: 'Sprint',
+  race: 'Race',
+}
+
+function formatWeekendDates(w: Weekend): string {
+  const start = new Date(w.qualifying_deadline)
+  const end = new Date(w.race_deadline)
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+  return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`
+}
+
+function groupBreakdownByWeekend(
+  rows: BreakdownRow[],
+  weekends: Weekend[],
+): { weekendId: string; gpName: string; sessions: { session: string; points: number }[] }[] {
+  const weekendMap: Record<string, Record<string, number>> = {}
+
+  for (const row of rows) {
+    if (!weekendMap[row.weekend_id]) weekendMap[row.weekend_id] = {}
+    const current = weekendMap[row.weekend_id][row.session_type] ?? 0
+    weekendMap[row.weekend_id][row.session_type] = current + row.points
+  }
+
+  return Object.entries(weekendMap).map(([wid, sessionPts]) => {
+    const found = weekends.find((w) => w.id === wid)
+    const gpName = found ? found.grand_prix : wid.slice(0, 8)
+    const sessions = Object.entries(sessionPts).map(([session, points]) => ({ session, points }))
+    return { weekendId: wid, gpName, sessions }
+  })
+}
+
 export default function HomePage() {
   const router = useRouter()
-  const [email, setEmail] = useState<string>('')
   const [weekends, setWeekends] = useState<Weekend[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([])
   const [breakdowns, setBreakdowns] = useState<Record<string, BreakdownRow[]>>({})
@@ -37,13 +71,11 @@ export default function HomePage() {
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      
+
       if (!user) {
         router.push('/auth')
         return
       }
-      
-      setEmail(user?.email ?? '')
 
       const [{ data: wData }, { data: lbData }] = await Promise.all([
         supabase
@@ -83,51 +115,52 @@ export default function HomePage() {
     setExpandedUsers(newSet)
   }
 
-  async function logout() {
-    if (!supabase) return
-    await supabase.auth.signOut()
-    router.push('/auth')
+  if (!configured) {
+    return (
+      <main className="container">
+        <div className="card" style={{ marginTop: '2rem' }}>
+          <p className="small">Supabase is not configured. Add env vars to get started.</p>
+        </div>
+      </main>
+    )
   }
 
   if (loading) {
-    return <main className="container"><p>Loading...</p></main>
+    return (
+      <main className="container">
+        <p className="small" style={{ marginTop: '2rem' }}>Loading...</p>
+      </main>
+    )
   }
 
   return (
     <main className="container">
-      <div className="nav" style={{ marginBottom: '1rem', gap: '1rem' }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Home</h2>
-          <p className="small" style={{ margin: '0.25rem 0 0 0' }}>{email}</p>
-        </div>
-        <div className="nav-links">
-          <Link href="/picks" className="small">Picks</Link>
-          <Link href="/rules" className="small">Rules</Link>
-          <button className="secondary" style={{ width: 'auto' }} onClick={logout}>Logout</button>
-        </div>
-      </div>
 
-      <div style={{ overflowX: 'auto', display: 'flex', gap: '1rem', padding: '1rem 0' }}>
+      {/* ── Race Cards Strip ── */}
+      <p className="section-header" style={{ marginBottom: '0.75rem' }}>Race Calendar</p>
+      <div className="race-strip">
+        {weekends.length === 0 && (
+          <p className="small">No race weekends configured yet.</p>
+        )}
         {weekends.map((w) => {
           const completed = Date.now() >= new Date(w.race_deadline).getTime()
           return (
-            <div
-              key={w.id}
-              className="card"
-              style={{ minWidth: '200px', flex: '0 0 auto', padding: '0.8rem' }}
-            >
-              <p>
-                {w.season} Round {w.round}
+            <div key={w.id} className={`race-card ${completed ? 'completed' : 'upcoming'}`}>
+              <p className="race-card-round">
+                {w.season} · Round {w.round}
               </p>
-              <p>{w.grand_prix}</p>
-              <p className="small">{completed ? 'Completed' : 'Upcoming'}</p>
+              <p className="race-card-name">{w.grand_prix}</p>
+              <p className="race-card-dates">{formatWeekendDates(w)}</p>
+              <p className={`race-card-status ${completed ? 'completed' : 'upcoming'}`}>
+                {completed ? '✓ Completed' : '● Upcoming'}
+              </p>
               {completed ? (
                 <Link href={`/weekly/${w.id}`}>
-                  <button className="small">View Results</button>
+                  <button className="secondary race-card-btn">View Results</button>
                 </Link>
               ) : (
                 <Link href={`/picks/${w.id}`}>
-                  <button className="small">Make Picks</button>
+                  <button className="race-card-btn">Make Picks</button>
                 </Link>
               )}
             </div>
@@ -135,70 +168,80 @@ export default function HomePage() {
         })}
       </div>
 
-      <h2>Leaderboard</h2>
-      <table className="table" style={{ marginTop: '0.6rem' }}>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Player</th>
-            <th>Points</th>
-          </tr>
-        </thead>
-        <tbody>
-          {leaderboard.map((row, idx) => (
-            <>
-              <tr
-                key={row.user_id}
+      {/* ── Overall Standings ── */}
+      <div className="leaderboard-section">
+        <p className="leaderboard-section-title">Overall Standings</p>
+
+        {leaderboard.length === 0 && (
+          <p className="small">No scores yet — leaderboard will appear once scoring is run.</p>
+        )}
+
+        {leaderboard.map((row, idx) => {
+          const isOpen = expandedUsers.has(row.user_id)
+          const userBreakdowns = breakdowns[row.user_id]
+          const grouped = userBreakdowns ? groupBreakdownByWeekend(userBreakdowns, weekends) : []
+
+          return (
+            <div key={row.user_id}>
+              <div
+                className="leaderboard-row"
                 onClick={() => toggleUser(row.user_id)}
-                style={{ cursor: 'pointer' }}
               >
-                <td>{idx + 1}</td>
-                <td>{row.display_name || row.user_id.slice(0, 8)}</td>
-                <td>{row.total_points}</td>
-              </tr>
-              {expandedUsers.has(row.user_id) && (
-                <tr>
-                  <td colSpan={3} style={{ padding: '0' }}>
-                    <table className="table" style={{ width: '100%' }}>
-                      <thead>
-                        <tr>
-                          <th>Weekend</th>
-                          <th>Session</th>
-                          <th>Pred</th>
-                          <th>Actual</th>
-                          <th>Driver</th>
-                          <th>Penalty</th>
-                          <th>Pts</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(breakdowns[row.user_id] || []).map((b, i) => (
-                          <tr key={i}>
-                            <td>{b.weekend_id}</td>
-                            <td>{b.session_type}</td>
-                            <td>{b.predicted_position}</td>
-                            <td>{b.actual_position ?? '-'}</td>
-                            <td>{b.driver_name}</td>
-                            <td>{b.penalty_reason ?? '-'}</td>
-                            <td>{b.points}</td>
+                <span className={`leaderboard-rank${idx < 3 ? ' top-3' : ''}`}>
+                  {idx + 1}
+                </span>
+                <span className="leaderboard-name">
+                  {row.display_name || row.user_id.slice(0, 8)}
+                </span>
+                <span className="leaderboard-points">{row.total_points}</span>
+                <span className="leaderboard-pts-label">pts</span>
+                <span className={`leaderboard-chevron${isOpen ? ' open' : ''}`}>›</span>
+              </div>
+
+              {isOpen && (
+                <div className="leaderboard-breakdown">
+                  <div className="leaderboard-breakdown-inner">
+                    {!userBreakdowns && (
+                      <p className="small">Loading...</p>
+                    )}
+                    {userBreakdowns && grouped.length === 0 && (
+                      <p className="small">No scored picks yet.</p>
+                    )}
+                    {grouped.length > 0 && (
+                      <table className="table" style={{ fontSize: 'var(--font-xs)' }}>
+                        <thead>
+                          <tr>
+                            <th>Race</th>
+                            <th>Session</th>
+                            <th>Pts</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
+                        </thead>
+                        <tbody>
+                          {grouped.map(({ weekendId, gpName, sessions }) =>
+                            sessions.map(({ session, points }, si) => (
+                              <tr key={`${weekendId}-${session}`}>
+                                <td style={{ color: si === 0 ? 'var(--ink)' : 'transparent', fontWeight: si === 0 ? 600 : 400 }}>
+                                  {si === 0 ? gpName : ''}
+                                </td>
+                                <td style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  {SESSION_LABELS[session] ?? session}
+                                </td>
+                                <td style={{ fontWeight: 700, color: points > 0 ? 'var(--status-saved)' : points < 0 ? 'var(--brand)' : 'var(--muted)' }}>
+                                  {points > 0 ? `+${points}` : points}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
               )}
-            </>
-          ))}
-          {leaderboard.length === 0 && (
-            <tr>
-              <td colSpan={3} className="small">
-                No scores yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+            </div>
+          )
+        })}
+      </div>
     </main>
   )
 }

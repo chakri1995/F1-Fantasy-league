@@ -30,7 +30,7 @@ export default function AuthPage() {
     }
 
     setStatus(isSignup ? 'Signup successful. Check email if confirmation is required.' : 'Login successful.')
-    router.push('/dashboard')
+    router.push('/')
     router.refresh()
   }
 
@@ -38,9 +38,7 @@ export default function AuthPage() {
     <main className="container">
       <div className="card" style={{ marginTop: '1rem', maxWidth: 520, marginInline: 'auto' }}>
         <h1>{isSignup ? 'Create Account' : 'Login'}</h1>
-        <p className="small" style={{ marginTop: '0.5rem' }}>
-          Private league now, expandable later.
-        </p>
+
 
         <form onSubmit={onSubmit} style={{ marginTop: '1rem' }}>
           <div style={{ marginBottom: '0.8rem' }}>
