@@ -98,6 +98,9 @@ export default function Nav() {
         <Link href="/picks" className={`site-nav-link${pathname?.startsWith('/picks') ? ' active' : ''}`}>
           Picks
         </Link>
+        <Link href="/results" className={`site-nav-link${pathname?.startsWith('/results') ? ' active' : ''}`}>
+          Results
+        </Link>
         <Link href="/rules" className={`site-nav-link${pathname === '/rules' ? ' active' : ''}`}>
           Rules
         </Link>
