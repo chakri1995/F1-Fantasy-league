@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { calculatePositionPoints, DNF_PENALTY, isDnfStatus, SessionType } from '@/lib/scoring'
+import { calculatePositionPoints, DNF_PENALTY, isDnfStatus, SessionType, SPRINT_WEEKEND_MULTIPLIER } from '@/lib/scoring'
 import { createSupabaseAnonClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
 async function ensureAdmin(request: NextRequest): Promise<{ ok: true } | { ok: false; error: NextResponse }> {
@@ -53,11 +53,15 @@ export async function POST(request: NextRequest) {
 
     const serviceClient = createSupabaseServiceClient()
 
-    const [{ data: picks, error: picksError }, { data: results, error: resultsError }, { data: drivers }] = await Promise.all([
+    const [{ data: picks, error: picksError }, { data: results, error: resultsError }, { data: drivers }, { data: weekend }] = await Promise.all([
       serviceClient.from('picks').select('*').eq('weekend_id', weekendId),
       serviceClient.from('session_results').select('*').eq('weekend_id', weekendId),
       serviceClient.from('drivers').select('id, full_name'),
+      serviceClient.from('race_weekends').select('sprint_qualifying_deadline').eq('id', weekendId).single(),
     ])
+
+    // A sprint weekend has a sprint_qualifying_deadline set
+    const isSprint = !!(weekend as any)?.sprint_qualifying_deadline
 
     if (picksError) {
       return NextResponse.json({ error: picksError.message }, { status: 500 })
@@ -88,17 +92,20 @@ export async function POST(request: NextRequest) {
       const key = `${pick.session_type}:${pick.driver_id}`
       const result = resultMap.get(key)
 
-      // session-specific scoring
+      // session-specific scoring (with sprint normalization if applicable)
       let points = 0
       if (result) {
-        points = calculatePositionPoints(pick.predicted_position, result.position, pick.session_type as any)
+        points = calculatePositionPoints(pick.predicted_position, result.position, pick.session_type as any, isSprint)
       }
       let penaltyReason: string | null = null
 
-      // apply DNF penalty for any session when the driver didn't finish
+      // apply DNF penalty (scaled on sprint weekends to match normalization)
       if (result && isDnfStatus(result.status)) {
-        points += DNF_PENALTY
-        penaltyReason = `DNF ${DNF_PENALTY}`
+        const penalty = isSprint
+          ? Math.round(DNF_PENALTY * SPRINT_WEEKEND_MULTIPLIER[pick.session_type as SessionType] * 100) / 100
+          : DNF_PENALTY
+        points += penalty
+        penaltyReason = `DNF ${penalty}`
       }
 
       return {

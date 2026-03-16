@@ -215,6 +215,7 @@ export default function RulesPage() {
           <li>Your picks are <strong style={{ color: 'var(--ink)' }}>private</strong>. No one can see what you picked until after the session locks.</li>
           <li>The leaderboard shows everyone&apos;s total points across all races.</li>
           <li>Not all race weekends have a Sprint — for non-sprint weekends, only Qualifying and Race picks count.</li>
+          <li><strong style={{ color: 'var(--ink)' }}>Sprint weekend normalization:</strong> points are scaled so the combined ceiling of a sprint weekend equals a normal weekend. Qualifying and Race are weighted ×⅔, Sprint Qualifying and Sprint Race are weighted ×⅓ — keeping the total max the same across all weekends.</li>
         </ul>
       </div>
     </main>
